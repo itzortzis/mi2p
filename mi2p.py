@@ -16,6 +16,16 @@ class MI2P(self):
         self.patches = []
         self.patches = np.zeros((self.N, self.W, self.W, 2))
 
+        self.run()
+
+    
+    def run(self):
+        self.get_bbox()
+        if self.blob != None:
+            self.extract_tumor_patches()
+        else:
+            self.extract_healthy_patches()
+
     
     def get_bbox(mask):
 
@@ -32,7 +42,7 @@ class MI2P(self):
     
 
 
-    def get_tumor_patches(self):
+    def extract_tumor_patches(self):
         x_min = self.blob.xmax - self.W
         x_max = self.blob.xmin
 
