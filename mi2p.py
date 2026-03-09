@@ -1,39 +1,40 @@
-
 import numpy as np
+import cv2
 
 
-
-
-class MI2P(self):
+class MI2P():
 
     def __init__(self, img, mask):
         self.N = 10
-        self.W = 512
+        self.W = 1024
         self.ratio = 0.8
         self.attempts = 200
         self.img = img
         self.mask = mask
         self.patches = []
-        self.patches = np.zeros((self.N, self.W, self.W, 2))
+        self.p_size = 256
+        self.patches = np.zeros((self.N, self.p_size, self.p_size, 2))
+
 
         self.run()
 
     
     def run(self):
-        self.get_bbox()
+        self.get_bbox(self.mask)
         if self.blob != None:
             self.extract_tumor_patches()
         else:
             self.extract_healthy_patches()
 
     
-    def get_bbox(mask):
+    def get_bbox(self, mask):
 
-        rows = np.any(mask, axis=1)
-        cols = np.any(mask, axis=0)
+        rows = np.any(mask, axis=0)
+        cols = np.any(mask, axis=1)
         
         if not np.any(rows) or not np.any(cols):
             self.blob = None
+            return
             
         ymin, ymax = np.where(rows)[0][[0, -1]]
         xmin, xmax = np.where(cols)[0][[0, -1]]
@@ -43,26 +44,44 @@ class MI2P(self):
 
 
     def extract_tumor_patches(self):
-        x_min = self.blob.xmax - self.W
-        x_max = self.blob.xmin
+        print("tumor", self.blob)
+        x_min = max(self.blob[2] - self.W, 0)
+        x_max = self.blob[0]
 
-        y_min = self.blob.ymax - self.W
-        y_max = self.blob.ymin
+        y_min = max(self.blob[3] - self.W, 0)
+        y_max = self.blob[1]
 
-        xs = np.random.choice(np.arange(x_min, x_max), 
-                                                size=self.N, replace=False)
-        ys = np.random.choice(np.arange(y_min, y_max), 
-                                                size=self.N, replace=False)
+        print(x_min, x_max, y_min, y_max)
+
+        x_space = np.arange(x_min, x_max)
+        if len(x_space) < self.N:
+            x_max = self.N + 1
+            x_space = np.arange(x_min, x_max)
+        y_space = np.arange(y_min, y_max)
+        if len(y_space) < self.N:
+            y_max = self.N + 1
+            y_space = np.arange(y_min, y_max)
+        
+        xs = np.random.choice(x_space, size=self.N, replace=False)
+        ys = np.random.choice(y_space, size=self.N, replace=False)
 
         patch = np.zeros((self.N, self.W, self.W, 2))
         for i in range(len(xs)):
-            self.patches[i, :, :, 0] = self.img[xs[i]: xs[i] + self.W, 
+             
+            
+            patch = self.img[xs[i]: xs[i] + self.W, ys[i]: ys[i] + self.W]
+            patch = cv2.resize(patch, dsize=(self.p_size, self.p_size), interpolation=cv2.INTER_CUBIC)
+            self.patches[i, :, :, 0] = patch
+            
+            patch_mask = self.mask[xs[i]: xs[i] + self.W, 
                                                         ys[i]: ys[i] + self.W]
-            self.patches[i, :, :, 1] = self.mask[xs[i]: xs[i] + self.W, 
-                                                        ys[i]: ys[i] + self.W]
+            patch_mask = cv2.resize(patch_mask, 
+                dsize=(self.p_size, self.p_size), interpolation=cv2.INTER_CUBIC)
+            self.patches[i, :, :, 1] = patch_mask
 
     
     def extract_healthy_patches(self):
+        print("healthy")
         n = self.N - 1
 
         idx = 0
@@ -78,7 +97,10 @@ class MI2P(self):
             ratio = tissue_area / patch_area
             
             if ratio >= self.ratio:
-                self.patches[idx, :, :, 0] =  candidate_area
+                patch = cv2.resize(candidate_area, 
+                                dsize=(self.p_size, self.p_size), 
+                                        interpolation=cv2.INTER_CUBIC)
+                self.patches[idx, :, :, 0] =  patch
                 idx += 1
                 n -= 1
             self.attempts -= 1
